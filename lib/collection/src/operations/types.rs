@@ -12,7 +12,6 @@ use api::rest::{
     SearchRequestInternal, ShardKeySelector, VectorStructOutput,
 };
 use common::ext::OptionExt;
-use common::progress_tracker::ProgressTree;
 use common::rate_limiting::{RateLimitError, RetryError};
 use common::types::ScoreType;
 use common::validation::validate_range_generic;
@@ -51,7 +50,6 @@ use uuid::Uuid;
 use validator::{Validate, ValidationError, ValidationErrors};
 
 use super::ClockTag;
-use crate::collection_manager::optimizers::TrackerStatus;
 use crate::config::{CollectionConfigInternal, CollectionParams, WalConfig};
 use crate::operations::cluster_ops::ReshardingDirection;
 use crate::operations::config_diff::{HnswConfigDiff, QuantizationConfigDiff};
@@ -311,85 +309,6 @@ pub struct CollectionClusterInfo {
     // TODO(resharding): remove this skip when releasing resharding
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resharding_operations: Option<Vec<ReshardingInfo>>,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct OptimizationsRequestOptions {
-    /// `?with=queued`
-    pub queued: bool,
-    /// `?with=completed` and `?completed_limit=N`
-    pub completed_limit: Option<usize>,
-    /// `?with=idle_segments`
-    pub idle_segments: bool,
-}
-
-/// Optimizations progress for the collection
-#[derive(Debug, Serialize, JsonSchema)]
-pub struct OptimizationsResponse {
-    pub summary: OptimizationsSummary,
-    /// Currently running optimizations.
-    pub running: Vec<Optimization>,
-    /// An estimated queue of pending optimizations.
-    /// Requires `?with=queued`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub queued: Option<Vec<PendingOptimization>>,
-    /// Completed optimizations.
-    /// Requires `?with=completed`. Limited by `?completed_limit=N`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub completed: Option<Vec<Optimization>>,
-    /// Segments that don't require optimization.
-    /// Requires `?with=idle_segments`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub idle_segments: Option<Vec<OptimizationSegmentInfo>>,
-}
-
-#[derive(Debug, Serialize, JsonSchema)]
-pub struct OptimizationsSummary {
-    /// Number of pending optimizations in the queue.
-    /// Each optimization will take one or more unoptimized segments and produce
-    /// one optimized segment.
-    pub queued_optimizations: usize,
-    /// Number of unoptimized segments in the queue.
-    pub queued_segments: usize,
-    /// Number of points in unoptimized segments in the queue.
-    pub queued_points: usize,
-    /// Number of segments that don't require optimization.
-    pub idle_segments: usize,
-}
-
-#[derive(Debug, Serialize, JsonSchema)]
-pub struct Optimization {
-    /// Unique identifier of the optimization process.
-    ///
-    /// After the optimization is complete, a new segment will be created with
-    /// this UUID.
-    pub uuid: Uuid,
-    /// Name of the optimizer that performed this optimization.
-    pub optimizer: &'static str,
-    pub status: TrackerStatus,
-    /// Segments being optimized.
-    ///
-    /// After the optimization is complete, these segments will be replaced
-    /// by the new optimized segment.
-    pub segments: Vec<OptimizationSegmentInfo>,
-    pub progress: ProgressTree,
-}
-
-#[derive(Debug, Clone, Serialize, JsonSchema)]
-pub struct PendingOptimization {
-    /// Name of the optimizer that scheduled this optimization.
-    pub optimizer: &'static str,
-    /// Segments that will be optimized.
-    pub segments: Vec<OptimizationSegmentInfo>,
-}
-
-// See also [`segment::types::SegmentInfo`] which is used in telemetry.
-#[derive(Debug, Clone, Serialize, JsonSchema)]
-pub struct OptimizationSegmentInfo {
-    /// Unique identifier of the segment.
-    pub uuid: Uuid,
-    /// Number of non-deleted points in the segment.
-    pub points_count: usize,
 }
 
 #[derive(Debug, Serialize, JsonSchema, Clone, Anonymize)]
